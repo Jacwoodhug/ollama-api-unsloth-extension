@@ -3,10 +3,14 @@
 
 # Whitelist Plugin Files
 !ollama-api/
-!ollama-api/**
+!ollama-api/*
 !launch-unsloth.ps1
 !unsloth.ico
 !Unsloth Studio.lnk
+
+# Reignore settings.json
+ollama-api/settings.json
+ollama-api/__pycache__/
 
 # Whitelist .gitignore
 !.gitignore

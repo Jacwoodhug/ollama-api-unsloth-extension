@@ -9,6 +9,7 @@
   const MANAGER = 'http://localhost:11435';
   const PLUGIN_ATTR = 'data-ollama-plugin';
   let pollTimer = null;
+  let formPopulated = false;
 
   /* ------------------------------------------------------------------ */
   /* Utilities                                                            */
@@ -128,6 +129,7 @@
     modal.querySelector('#op-toggle').addEventListener('click', onToggle);
     modal.querySelector('#op-save').addEventListener('click', onSave);
 
+    formPopulated = false;
     refreshStatus();
     pollTimer = setInterval(refreshStatus, 2000);
   }
@@ -145,7 +147,10 @@
     try {
       const data = await apiFetch('/status');
       updateStatusUI(data.running);
-      populateForm(data.settings || {});
+      if (!formPopulated) {
+        populateForm(data.settings || {});
+        formPopulated = true;
+      }
     } catch {
       updateStatusUI(null);
     }

@@ -43,6 +43,14 @@ try {
     }
 } finally {
     Write-Host "[SETUP] Stopping manager and proxy..."
-    Stop-Job  $managerJob -ErrorAction SilentlyContinue
+    $proxyPort = 11434
+    $settingsFile = "$ROOT\ollama-api\settings.json"
+    if (Test-Path $settingsFile) {
+        try { $proxyPort = (Get-Content $settingsFile -Raw | ConvertFrom-Json).proxy_port } catch {}
+    }
+    foreach ($port in 8888, 11435, $proxyPort) {
+        $conn = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
+        if ($conn) { Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue }
+    }
     Remove-Job $managerJob, $unslothJob -Force -ErrorAction SilentlyContinue
 }

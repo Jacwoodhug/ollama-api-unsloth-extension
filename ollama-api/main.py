@@ -21,11 +21,11 @@ from config import get_config_value, get_int_config_value
 
 load_dotenv()
 
-UNSLOTH_BASE_URL: str = get_config_value("UNSLOTH_BASE_URL", "http://localhost:8888")
-UNSLOTH_API_KEY: str = get_config_value("UNSLOTH_API_KEY", "")
-PROXY_HOST: str = get_config_value("PROXY_HOST", "0.0.0.0")
-PROXY_PORT: str = get_config_value("PROXY_PORT", "11434")
-MODEL_CONTEXT_LENGTH: int = get_int_config_value("MODEL_CONTEXT_LENGTH", 32768)
+UNSLOTH_BASE_URL: str = get_config_value("unsloth_base_url", "http://localhost:8888")
+UNSLOTH_API_KEY: str = get_config_value("unsloth_api_key", "")
+PROXY_HOST: str = get_config_value("proxy_host", "0.0.0.0")
+PROXY_PORT: str = get_config_value("proxy_port", "11434")
+MODEL_CONTEXT_LENGTH: int = get_int_config_value("model_context_length", 32768)
 
 
 # ---------------------------------------------------------------------------
