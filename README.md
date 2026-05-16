@@ -1,8 +1,8 @@
-# Unsloth Studio + Ollama Proxy
+# Ollama API Unsloth Extension
 
-Runs [Unsloth Studio](https://unsloth.ai) locally and exposes a fully **Ollama-compatible API** on port `11434`, so any Ollama client (VS Code Copilot, Open WebUI, Continue, etc.) can use your locally-running Unsloth model without any client-side changes.
+This extension for Unsloth Studio exposes a fully **Ollama-compatible API** on port `11434` (configurable), so any client that uses the Ollama API (VS Code Copilot, Open WebUI, Continue, etc.) can use your locally-running Unsloth models without any client-side changes.
 
-A persistent manager server and in-browser plugin let you control the proxy and edit its settings directly from the Studio sidebar — no terminal required after first launch.
+A persistent manager server and in-browser plugin let you control the proxy and edit its settings directly from the Studio sidebar.
 
 ---
 
@@ -25,7 +25,7 @@ Unsloth Studio (your local model)
 - **Manager** (`manager.py`) on port `11435` — manages the proxy lifecycle and serves the UI plugin
 - **Proxy** (`main.py`) on port `11434` — auto-started by the manager
 - **Unsloth Studio** on port `8888`
-- Injects an **"Ollama Proxy" button** into the Studio sidebar on first launch (idempotent)
+- Injects an **"Ollama Proxy" button** into the Studio sidebar on first launch
 
 ---
 
@@ -117,6 +117,25 @@ Press `Ctrl+C` in the terminal running the launch script. It will kill all three
 
 ---
 
+## Uninstalling
+
+The only persistent change made outside this repo is the `<script>` tag injected into the Studio WebUI. To remove it:
+
+**Windows:**
+```powershell
+.\uninstall.ps1
+```
+
+**Linux:**
+```bash
+chmod +x uninstall.sh
+./uninstall.sh
+```
+
+Afterward you can delete the cloned files. The Studio and llama.cpp directories are left untouched.
+
+---
+
 ## Project Structure
 
 ```
@@ -125,5 +144,7 @@ Press `Ctrl+C` in the terminal running the launch script. It will kill all three
 ├── llama.cpp/              # llama.cpp binaries (pre-existing)
 ├── launch-unsloth.ps1      # ← this repo: entry point (Windows)
 ├── launch-unsloth.sh       # ← this repo: entry point (Linux)
+├── uninstall.ps1           # ← this repo: removes WebUI injection (Windows)
+├── uninstall.sh            # ← this repo: removes WebUI injection (Linux)
 └── ollama-api/             # ← this repo: proxy + manager + plugin
 ```

@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+ROOT="$(dirname "$(realpath "$0")")"
+PYTHON="$ROOT/studio/unsloth_studio/bin/python"
+INDEX="$(find "$ROOT/studio/unsloth_studio/lib" -path "*/studio/frontend/dist/index.html" 2>/dev/null | head -1)"
+
+# 1. Remove injected plugin tag from Studio WebUI
+if [[ -z "$INDEX" || ! -f "$INDEX" ]]; then
+    echo "[UNINSTALL] index.html not found — skipping WebUI cleanup"
+elif ! grep -q 'localhost:11435/plugin\.js' "$INDEX"; then
+    echo "[UNINSTALL] Plugin tag not found in index.html — skipping"
+else
+    "$PYTHON" -c "
+content = open('$INDEX', encoding='utf-8').read()
+tag = '<script src=\"http://localhost:11435/plugin.js\" defer></script>'
+open('$INDEX', 'w', encoding='utf-8').write(content.replace(tag + '\n', '').replace(tag, ''))
+"
+    echo "[UNINSTALL] Removed Ollama proxy plugin from Studio WebUI"
+fi
+
+# 2. Remove ollama-api folder
+if [[ -d "$ROOT/ollama-api" ]]; then
+    rm -rf "$ROOT/ollama-api"
+    echo "[UNINSTALL] Removed ollama-api/"
+fi
+
+# 3. Remove launch scripts and the other uninstall script
+for file in launch-unsloth.ps1 launch-unsloth.sh uninstall.ps1; do
+    if [[ -f "$ROOT/$file" ]]; then
+        rm -f "$ROOT/$file"
+        echo "[UNINSTALL] Removed $file"
+    fi
+done
+
+echo "[UNINSTALL] Done. You can now delete this script."

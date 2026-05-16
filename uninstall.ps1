@@ -1,0 +1,31 @@
+$ROOT   = $PSScriptRoot
+$INDEX  = "$ROOT\studio\unsloth_studio\Lib\site-packages\studio\frontend\dist\index.html"
+$TAG    = '<script src="http://localhost:11435/plugin.js" defer></script>'
+
+# 1. Remove injected plugin tag from Studio WebUI
+if (-not (Test-Path $INDEX)) {
+    Write-Host "[UNINSTALL] index.html not found — skipping WebUI cleanup"
+} elseif ((Get-Content $INDEX -Raw) -notmatch 'localhost:11435/plugin\.js') {
+    Write-Host "[UNINSTALL] Plugin tag not found in index.html — skipping"
+} else {
+    (Get-Content $INDEX -Raw).Replace("$TAG`n", "").Replace($TAG, "") |
+        Set-Content $INDEX -Encoding utf8
+    Write-Host "[UNINSTALL] Removed Ollama proxy plugin from Studio WebUI"
+}
+
+# 2. Remove ollama-api folder
+if (Test-Path "$ROOT\ollama-api") {
+    Remove-Item "$ROOT\ollama-api" -Recurse -Force
+    Write-Host "[UNINSTALL] Removed ollama-api/"
+}
+
+# 3. Remove launch scripts and the other uninstall script
+foreach ($file in 'launch-unsloth.ps1', 'launch-unsloth.sh', 'uninstall.sh') {
+    $path = "$ROOT\$file"
+    if (Test-Path $path) {
+        Remove-Item $path -Force
+        Write-Host "[UNINSTALL] Removed $file"
+    }
+}
+
+Write-Host "[UNINSTALL] Done. You can now delete this script."
