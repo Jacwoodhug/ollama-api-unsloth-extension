@@ -1,5 +1,6 @@
 $ROOT    = $PSScriptRoot
-$env:LLAMA_SERVER_PATH = "$ROOT\llama.cpp\llama-server.exe"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 $PYTHON  = "$ROOT\studio\unsloth_studio\Scripts\python.exe"
 $INDEX   = "$ROOT\studio\unsloth_studio\Lib\site-packages\studio\frontend\dist\index.html"
 $PLUGIN_TAG = '<script src="http://localhost:11435/plugin.js" defer></script>'
@@ -18,8 +19,15 @@ if ((Test-Path $INDEX) -and ((Get-Content $INDEX -Raw) -notmatch 'localhost:1143
     Write-Host "[SETUP] Injected Ollama proxy plugin into Studio WebUI"
 }
 
-# 3. Open browser after server starts
-Start-Process powershell -WindowStyle Hidden -ArgumentList "-Command `"Start-Sleep 5; Start-Process 'http://127.0.0.1:8888'`""
+# 3. Open browser after server starts (if enabled in settings)
+$openBrowser = $false
+$settingsFile = "$ROOT\ollama-api\settings.json"
+if (Test-Path $settingsFile) {
+    try { $openBrowser = (Get-Content $settingsFile -Raw | ConvertFrom-Json).open_browser_on_startup } catch {}
+}
+if ($openBrowser) {
+    Start-Process powershell -WindowStyle Hidden -ArgumentList "-Command `"Start-Sleep 5; Start-Process 'http://127.0.0.1:8888'`""
+}
 
 # 4. Start manager (which auto-starts proxy) and unsloth as background jobs
 $managerJob = Start-Job -ScriptBlock {
@@ -29,7 +37,7 @@ $managerJob = Start-Job -ScriptBlock {
 
 $unslothJob = Start-Job -ScriptBlock {
     param($root)
-    $env:LLAMA_SERVER_PATH = "$root\llama.cpp\llama-server.exe"
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
     & "$root\studio\unsloth_studio\Scripts\unsloth.exe" studio -p 8888 2>&1
 } -ArgumentList $ROOT
 

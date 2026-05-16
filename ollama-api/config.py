@@ -16,6 +16,7 @@ _DEFAULTS: dict = {
     "model_context_length": 32768,
     "proxy_host": "0.0.0.0",
     "proxy_port": 11434,
+    "open_browser_on_startup": False,
 }
 
 _KEY_TO_ENV: dict[str, str] = {
@@ -24,6 +25,7 @@ _KEY_TO_ENV: dict[str, str] = {
     "model_context_length": "MODEL_CONTEXT_LENGTH",
     "proxy_host": "PROXY_HOST",
     "proxy_port": "PROXY_PORT",
+    "open_browser_on_startup": "OPEN_BROWSER_ON_STARTUP",
 }
 
 

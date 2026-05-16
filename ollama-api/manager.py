@@ -113,7 +113,7 @@ def get_settings():
 
 @app.put("/settings")
 def put_settings(data: dict):
-    allowed_keys = {"unsloth_base_url", "unsloth_api_key", "model_context_length", "proxy_host", "proxy_port"}
+    allowed_keys = {"unsloth_base_url", "unsloth_api_key", "model_context_length", "proxy_host", "proxy_port", "open_browser_on_startup"}
     unknown = set(data.keys()) - allowed_keys
     if unknown:
         raise HTTPException(status_code=422, detail=f"Unknown settings keys: {unknown}")

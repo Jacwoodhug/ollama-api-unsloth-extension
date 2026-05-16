@@ -102,6 +102,10 @@
               <input id="op-port" type="number" style="${inputStyle(dark)}" placeholder="11434"/>
             </label>
           </div>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input id="op-open-browser" type="checkbox" style="width:15px;height:15px;cursor:pointer"/>
+            Open browser on startup
+          </label>
         </div>
 
         <!-- Footer -->
@@ -186,6 +190,8 @@
     set('#op-ctx-len', settings.model_context_length);
     set('#op-host', settings.proxy_host);
     set('#op-port', settings.proxy_port);
+    const cb = modal.querySelector('#op-open-browser');
+    if (cb && settings.open_browser_on_startup !== undefined) cb.checked = !!settings.open_browser_on_startup;
   }
 
   async function onToggle() {
@@ -210,6 +216,7 @@
       model_context_length: parseInt(get('#op-ctx-len'), 10) || 32768,
       proxy_host: get('#op-host'),
       proxy_port: parseInt(get('#op-port'), 10) || 11434,
+      open_browser_on_startup: !!(modal.querySelector('#op-open-browser')?.checked),
     };
     try {
       await apiFetch('/settings', {

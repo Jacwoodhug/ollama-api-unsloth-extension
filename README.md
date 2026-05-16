@@ -141,7 +141,6 @@ Afterward you can delete the cloned files. The Studio and llama.cpp directories 
 ```
 ~/.unsloth/                 # Unsloth root (pre-existing)
 ├── studio/                 # Unsloth Studio (pre-existing)
-├── llama.cpp/              # llama.cpp binaries (pre-existing)
 ├── launch-unsloth.ps1      # ← this repo: entry point (Windows)
 ├── launch-unsloth.sh       # ← this repo: entry point (Linux)
 ├── uninstall.ps1           # ← this repo: removes WebUI injection (Windows)

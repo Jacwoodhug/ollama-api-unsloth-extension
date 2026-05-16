@@ -2,7 +2,6 @@
 set -uo pipefail
 
 ROOT="$(dirname "$(realpath "$0")")"
-export LLAMA_SERVER_PATH="$ROOT/llama.cpp/llama-server"
 PYTHON="$ROOT/studio/unsloth_studio/bin/python"
 INDEX="$(find "$ROOT/studio/unsloth_studio/lib" -path "*/studio/frontend/dist/index.html" 2>/dev/null | head -1)"
 PLUGIN_TAG='<script src="http://localhost:11435/plugin.js" defer></script>'
@@ -23,8 +22,14 @@ open('$INDEX', 'w', encoding='utf-8').write(content.replace('</body>', tag + '\n
     echo "[SETUP] Injected Ollama proxy plugin into Studio WebUI"
 fi
 
-# 3. Open browser after server starts
-(sleep 5 && (xdg-open 'http://127.0.0.1:8888' 2>/dev/null || open 'http://127.0.0.1:8888' 2>/dev/null || true)) &
+# 3. Open browser after server starts (if enabled in settings)
+SETTINGS="$ROOT/ollama-api/settings.json"
+if [[ -f "$SETTINGS" ]]; then
+    OPEN_BROWSER=$("$PYTHON" -c "import json; print(json.load(open('$SETTINGS')).get('open_browser_on_startup', False))" 2>/dev/null || echo "False")
+    if [[ "$OPEN_BROWSER" == "True" ]]; then
+        (sleep 5 && (xdg-open 'http://127.0.0.1:8888' 2>/dev/null || open 'http://127.0.0.1:8888' 2>/dev/null || true)) &
+    fi
+fi
 
 # 4. Start manager (which auto-starts proxy) and unsloth as background processes
 "$PYTHON" "$ROOT/ollama-api/manager.py" &
