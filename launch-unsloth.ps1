@@ -1,0 +1,48 @@
+$env:LLAMA_SERVER_PATH = "C:\Users\jacwo\.unsloth\llama.cpp\llama-server.exe"
+$ROOT    = "C:\Users\jacwo\.unsloth"
+$PYTHON  = "$ROOT\studio\unsloth_studio\Scripts\python.exe"
+$INDEX   = "$ROOT\studio\unsloth_studio\Lib\site-packages\studio\frontend\dist\index.html"
+$PLUGIN_TAG = '<script src="http://localhost:11435/plugin.js" defer></script>'
+
+# 1. Install proxy requirements into studio Python (once; skips if already satisfied)
+$check = & $PYTHON -c "import fastapi, httpx, uvicorn, dotenv" 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[SETUP] Installing ollama-api dependencies..."
+    & $PYTHON -m pip install -r "$ROOT\ollama-api\requirements.txt" --quiet
+}
+
+# 2. Inject plugin script tag into Studio index.html (idempotent)
+if ((Test-Path $INDEX) -and ((Get-Content $INDEX -Raw) -notmatch 'localhost:11435/plugin\.js')) {
+    (Get-Content $INDEX -Raw).Replace('</body>', "$PLUGIN_TAG`n</body>") |
+        Set-Content $INDEX -Encoding utf8
+    Write-Host "[SETUP] Injected Ollama proxy plugin into Studio WebUI"
+}
+
+# 3. Open browser after server starts
+Start-Process powershell -WindowStyle Hidden -ArgumentList "-Command `"Start-Sleep 5; Start-Process 'http://127.0.0.1:8888'`""
+
+# 4. Start manager (which auto-starts proxy) and unsloth as background jobs
+$managerJob = Start-Job -ScriptBlock {
+    param($root, $python)
+    & $python "$root\ollama-api\manager.py" 2>&1
+} -ArgumentList $ROOT, $PYTHON
+
+$unslothJob = Start-Job -ScriptBlock {
+    param($root)
+    $env:LLAMA_SERVER_PATH = "$root\llama.cpp\llama-server.exe"
+    & "$root\studio\unsloth_studio\Scripts\unsloth.exe" studio -p 8888 2>&1
+} -ArgumentList $ROOT
+
+# 5. Relay output: manager self-labels [PROXY] lines; PS1 adds [UNSLOTH] to unsloth
+try {
+    while ($true) {
+        Receive-Job $managerJob  | ForEach-Object { Write-Host $_ }
+        Receive-Job $unslothJob  | ForEach-Object { Write-Host "[UNSLOTH] $_" }
+        if ($unslothJob.State -ne 'Running') { break }
+        Start-Sleep -Milliseconds 200
+    }
+} finally {
+    Write-Host "[SETUP] Stopping manager and proxy..."
+    Stop-Job  $managerJob -ErrorAction SilentlyContinue
+    Remove-Job $managerJob, $unslothJob -Force -ErrorAction SilentlyContinue
+}

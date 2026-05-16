@@ -1,0 +1,12 @@
+# Ignore everything
+*
+
+# Whitelist Plugin Files
+!ollama-api/
+!ollama-api/**
+!launch-unsloth.ps1
+!unsloth.ico
+!Unsloth Studio.lnk
+
+# Whitelist .gitignore
+!.gitignore
