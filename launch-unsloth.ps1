@@ -1,5 +1,5 @@
-$env:LLAMA_SERVER_PATH = "C:\Users\jacwo\.unsloth\llama.cpp\llama-server.exe"
-$ROOT    = "C:\Users\jacwo\.unsloth"
+$ROOT    = $PSScriptRoot
+$env:LLAMA_SERVER_PATH = "$ROOT\llama.cpp\llama-server.exe"
 $PYTHON  = "$ROOT\studio\unsloth_studio\Scripts\python.exe"
 $INDEX   = "$ROOT\studio\unsloth_studio\Lib\site-packages\studio\frontend\dist\index.html"
 $PLUGIN_TAG = '<script src="http://localhost:11435/plugin.js" defer></script>'

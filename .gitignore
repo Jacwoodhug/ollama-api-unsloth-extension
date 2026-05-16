@@ -5,6 +5,7 @@
 !ollama-api/
 !ollama-api/*
 !launch-unsloth.ps1
+!launch-unsloth.sh
 !unsloth.ico
 !Unsloth Studio.lnk
 
@@ -12,5 +13,6 @@
 ollama-api/settings.json
 ollama-api/__pycache__/
 
-# Whitelist .gitignore
+# Whitelist root files
 !.gitignore
+!README.md
