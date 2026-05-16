@@ -8,8 +8,6 @@
 !launch-unsloth.sh
 !uninstall.ps1
 !uninstall.sh
-!unsloth.ico
-!Unsloth Studio.lnk
 
 # Reignore settings.json
 ollama-api/settings.json
