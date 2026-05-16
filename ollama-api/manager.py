@@ -120,6 +120,17 @@ def put_settings(data: dict):
     current = read_proxy_settings()
     current.update(data)
     write_proxy_settings(current)
+
+    # Restart proxy so it picks up the new settings
+    with _lock:
+        if _is_running():
+            _proxy_process.terminate()
+            try:
+                _proxy_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                _proxy_process.kill()
+        _start_proxy_locked()
+
     return current
 
 

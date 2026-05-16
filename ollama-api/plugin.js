@@ -106,7 +106,7 @@
 
         <!-- Footer -->
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;gap:8px">
-          <span style="font-size:12px;opacity:0.6">Restart proxy after saving host/port changes.</span>
+          <span style="font-size:12px;opacity:0.6">Proxy restarts automatically on save.</span>
           <button id="op-save" style="padding:6px 18px;border-radius:6px;background:#7c3aed;color:#fff;border:none;cursor:pointer;font-weight:600">Save</button>
         </div>
       </div>`;
@@ -218,8 +218,8 @@
         body: JSON.stringify(payload),
       });
       const saveBtn = modal.querySelector('#op-save');
-      saveBtn.textContent = 'Saved!';
-      setTimeout(() => { saveBtn.textContent = 'Save'; }, 1500);
+      saveBtn.textContent = 'Restarting…';
+      setTimeout(() => { saveBtn.textContent = 'Save'; refreshStatus(); }, 2000);
     } catch (e) {
       console.error('[OllamaPlugin] save error', e);
     }
