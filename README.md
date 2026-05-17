@@ -2,7 +2,9 @@
 
 This extension for Unsloth Studio exposes a fully **Ollama-compatible API** proxy on port `11434` (configurable) so any client that uses the Ollama API (VS Code Copilot, Open WebUI, Continue, etc.) can use your locally-running Unsloth models without any client-side changes.
 
-A persistent manager server and in-browser plugin let you control the proxy and edit its settings directly from the Studio sidebar.
+When **auto-switch model** is enabled, the model list exposed to clients reflects your actual downloaded models, broken down by quantization — so `gemma-4-E2B-it-GGUF:BF16` and `gemma-4-E2B-it-GGUF:UD-Q4_K_XL` appear as separate selectable models, just like Ollama's `model:tag` convention. With auto-switch off, the proxy passes the model list through directly from Studio.
+
+A persistent manager server and in-browser plugin let you control the proxy, browse your model list, and edit per-model settings directly from the Studio sidebar.
 
 ---
 
@@ -66,24 +68,50 @@ Unsloth Studio (your local model)
 
 ---
 
+## Model List & Auto-Switch
+
+Enable **Auto-switch models** in the proxy modal to unlock the full model management experience:
+
+- The proxy queries Unsloth Studio's API to build an accurate list of every model you have downloaded, including **individual GGUF quant variants** (e.g. `gemma-4-E2B-it-GGUF:BF16`, `gemma-4-E2B-it-GGUF:UD-Q4_K_XL`).
+- Vision capability is detected from the Studio API for GGUF models and from model name for transformer models.
+- When an Ollama client requests a model, the proxy **automatically loads it** in Studio including context length and any additional arguments set in the Ollama Proxy model settings (unloading whatever was previously running), then streams the response. This mirrors Ollama's own on-demand loading behaviour.
+
+### Per-Model Settings
+
+Each model in the list has configurable settings stored in `ollama-api/model_settings.json`:
+
+| Field | Description |
+|-------|-------------|
+| **Context** | Override the context window for this model. Falls back to the global default. |
+| **Extra Args** | Space-separated llama.cpp flags passed when loading a GGUF model (e.g. `--threads 8`). |
+| **Capabilities** | `completion`, `tools`, `vision` — reported to Ollama clients. |
+| **Hide from API** | Exclude the model from `/api/tags` so clients don't see it. |
+
+Settings for a quant-specific entry (e.g. `gemma-4-E2B-it-GGUF:BF16`) take priority over the base model entry (`gemma-4-E2B-it-GGUF`), which itself serves as a fallback for all quants of that repo.
+
+New models are added to `model_settings.json` automatically with sensible defaults the first time they are seen.
+
+---
+
 ## Configuration
 
-Settings are stored in `ollama-api/settings.json` (auto-created with defaults on first run, gitignored):
+Proxy settings are stored in `ollama-api/settings.json` (auto-created with defaults on first run, gitignored):
 
 | Key | Default | Description |
 |-----|---------|-------------|
 | `unsloth_base_url` | `http://localhost:8888` | Unsloth Studio URL |
 | `unsloth_api_key` | *(empty)* | API key shown in Studio |
-| `model_context_length` | `32768` | Context window to report to Ollama clients |
+| `model_context_length` | `32768` | Default context window when no per-model override is set |
 | `proxy_host` | `0.0.0.0` | Interface for the proxy to bind to |
 | `proxy_port` | `11434` | Port the Ollama-compatible proxy listens on |
+| `auto_switch_model` | `false` | Load models on demand when requested by a client |
 
 **Priority chain:** `.env` file > `settings.json` > hardcoded defaults.
 
 ### Editing Settings
 
-- **In-browser:** Click **Ollama Proxy** in the Studio sidebar → edit fields → **Save**
-- **Manually:** Edit `ollama-api/settings.json` directly, then restart the proxy (Stop → Start in the modal)
+- **In-browser:** Click **Ollama Proxy** in the Studio sidebar → edit fields → **Save**. Per-model settings have their own **Save model settings** button in the Models table.
+- **Manually:** Edit `ollama-api/settings.json` or `ollama-api/model_settings.json` directly, then restart the proxy (Stop → Start in the modal) if needed.
 
 ### Finding Your API Key
 
@@ -91,7 +119,7 @@ Open Unsloth Studio → Settings — the API key is displayed there. Copy it int
 
 ### Context Length
 
-Set `model_context_length` to match the context window of the model you have loaded in Unsloth. If this is too low, tools like VS Code Copilot will compact conversations prematurely.
+`model_context_length` sets the default context window used when loading any model. Override it per-model in the Models table to fine-tune memory usage for specific models or quants.
 
 ---
 
