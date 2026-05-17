@@ -57,7 +57,6 @@ Unsloth Studio (your local model)
 
    **Linux:**
    ```bash
-   chmod +x launch-unsloth.sh
    ./launch-unsloth.sh
    ```
 
@@ -156,7 +155,6 @@ The only persistent change made outside this repo is the `<script>` tag injected
 
 **Linux:**
 ```bash
-chmod +x uninstall.sh
 ./uninstall.sh
 ```
 

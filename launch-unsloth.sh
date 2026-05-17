@@ -4,7 +4,10 @@ set -uo pipefail
 ROOT="$(dirname "$(realpath "$0")")"
 PYTHON="$ROOT/studio/unsloth_studio/bin/python"
 INDEX="$(find "$ROOT/studio/unsloth_studio/lib" -path "*/studio/frontend/dist/index.html" 2>/dev/null | head -1)"
-PLUGIN_TAG='<script src="http://localhost:11435/plugin.js" defer></script>'
+# Bootstrap that loads plugin.js from whichever host the user is browsing from,
+# so it works for both localhost and Tailscale / remote access.
+PLUGIN_TAG="<script>(function(){var s=document.createElement('script');s.src=location.protocol+'//'+location.hostname+':11435/plugin.js';s.defer=true;document.head.appendChild(s);})();</script>"
+OLD_PLUGIN_TAG='<script src="http://localhost:11435/plugin.js" defer></script>'
 
 # 1. Install proxy requirements into studio Python (once; skips if already satisfied)
 if ! "$PYTHON" -c "import fastapi, httpx, uvicorn, dotenv" 2>/dev/null; then
@@ -13,13 +16,25 @@ if ! "$PYTHON" -c "import fastapi, httpx, uvicorn, dotenv" 2>/dev/null; then
 fi
 
 # 2. Inject plugin script tag into Studio index.html (idempotent)
-if [[ -f "$INDEX" ]] && ! grep -q 'localhost:11435/plugin\.js' "$INDEX"; then
-    "$PYTHON" -c "
+if [[ -f "$INDEX" ]]; then
+    if grep -qF "$OLD_PLUGIN_TAG" "$INDEX"; then
+        # Migrate old hardcoded-localhost tag to the new dynamic bootstrap
+        "$PYTHON" -c "
+import sys
 content = open('$INDEX', encoding='utf-8').read()
-tag = '<script src=\"http://localhost:11435/plugin.js\" defer></script>'
+old = '<script src=\"http://localhost:11435/plugin.js\" defer></script>'
+new = \"$PLUGIN_TAG\"
+open('$INDEX', 'w', encoding='utf-8').write(content.replace(old, new, 1))
+"
+        echo "[SETUP] Updated Ollama proxy plugin (dynamic hostname)"
+    elif ! grep -q '11435/plugin\.js' "$INDEX"; then
+        "$PYTHON" -c "
+content = open('$INDEX', encoding='utf-8').read()
+tag = \"$PLUGIN_TAG\"
 open('$INDEX', 'w', encoding='utf-8').write(content.replace('</body>', tag + '\n</body>', 1))
 "
-    echo "[SETUP] Injected Ollama proxy plugin into Studio WebUI"
+        echo "[SETUP] Injected Ollama proxy plugin into Studio WebUI"
+    fi
 fi
 
 # 3. Open browser after server starts (if enabled in settings)

@@ -3,7 +3,10 @@ $ROOT    = $PSScriptRoot
 $OutputEncoding = [System.Text.Encoding]::UTF8
 $PYTHON  = "$ROOT\studio\unsloth_studio\Scripts\python.exe"
 $INDEX   = "$ROOT\studio\unsloth_studio\Lib\site-packages\studio\frontend\dist\index.html"
-$PLUGIN_TAG = '<script src="http://localhost:11435/plugin.js" defer></script>'
+# Bootstrap that loads plugin.js from whichever host the user is browsing from,
+# so it works for both localhost and Tailscale / remote access.
+$PLUGIN_TAG = "<script>(function(){var s=document.createElement('script');s.src=location.protocol+'//'+location.hostname+':11435/plugin.js';s.defer=true;document.head.appendChild(s);})();</script>"
+$OLD_PLUGIN_TAG = '<script src="http://localhost:11435/plugin.js" defer></script>'
 
 # 1. Install proxy requirements into studio Python (once; skips if already satisfied)
 $check = & $PYTHON -c "import fastapi, httpx, uvicorn, dotenv" 2>&1
@@ -13,10 +16,16 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # 2. Inject plugin script tag into Studio index.html (idempotent)
-if ((Test-Path $INDEX) -and ((Get-Content $INDEX -Raw) -notmatch 'localhost:11435/plugin\.js')) {
-    (Get-Content $INDEX -Raw).Replace('</body>', "$PLUGIN_TAG`n</body>") |
-        Set-Content $INDEX -Encoding utf8
-    Write-Host "[SETUP] Injected Ollama proxy plugin into Studio WebUI"
+if (Test-Path $INDEX) {
+    $content = Get-Content $INDEX -Raw
+    if ($content.Contains($OLD_PLUGIN_TAG)) {
+        # Migrate old hardcoded-localhost tag to the new dynamic bootstrap
+        $content.Replace($OLD_PLUGIN_TAG, $PLUGIN_TAG) | Set-Content $INDEX -Encoding utf8
+        Write-Host "[SETUP] Updated Ollama proxy plugin (dynamic hostname)"
+    } elseif (-not $content.Contains('11435/plugin.js')) {
+        $content.Replace('</body>', "$PLUGIN_TAG`n</body>") | Set-Content $INDEX -Encoding utf8
+        Write-Host "[SETUP] Injected Ollama proxy plugin into Studio WebUI"
+    }
 }
 
 # 3. Open browser after server starts (if enabled in settings)

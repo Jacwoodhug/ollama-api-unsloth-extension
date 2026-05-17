@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  const MANAGER = 'http://localhost:11435';
+  const MANAGER = location.protocol + '//' + location.hostname + ':11435';
   const PLUGIN_ATTR = 'data-ollama-plugin';
   let pollTimer = null;
   let formPopulated = false;
