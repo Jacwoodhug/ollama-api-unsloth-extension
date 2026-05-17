@@ -10,6 +10,8 @@ import sys
 import threading
 from pathlib import Path
 
+import model_scanner
+
 import uvicorn
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,7 +19,10 @@ from fastapi.middleware.cors import CORSMiddleware
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
 
-from config import read_proxy_settings, write_proxy_settings  # noqa: E402
+from config import (  # noqa: E402
+    read_proxy_settings, write_proxy_settings,
+    read_model_settings, write_model_settings,
+)
 
 app = FastAPI(title="Ollama Proxy Manager", version="1.0.0")
 app.add_middleware(
@@ -113,25 +118,83 @@ def get_settings():
 
 @app.put("/settings")
 def put_settings(data: dict):
-    allowed_keys = {"unsloth_base_url", "unsloth_api_key", "model_context_length", "proxy_host", "proxy_port", "open_browser_on_startup"}
+    allowed_keys = {
+        "unsloth_base_url", "unsloth_api_key", "model_context_length",
+        "proxy_host", "proxy_port", "open_browser_on_startup",
+        "model_directory", "auto_switch_model", "model_configs",
+    }
     unknown = set(data.keys()) - allowed_keys
     if unknown:
         raise HTTPException(status_code=422, detail=f"Unknown settings keys: {unknown}")
-    current = read_proxy_settings()
-    current.update(data)
-    write_proxy_settings(current)
 
-    # Restart proxy so it picks up the new settings
-    with _lock:
-        if _is_running():
-            _proxy_process.terminate()
-            try:
-                _proxy_process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                _proxy_process.kill()
-        _start_proxy_locked()
+    # model_configs lives in its own file — extract and save it separately.
+    if "model_configs" in data:
+        write_model_settings(data.pop("model_configs"))
+
+    restart_keys = {
+        "unsloth_base_url", "unsloth_api_key", "model_context_length",
+        "proxy_host", "proxy_port", "open_browser_on_startup",
+        "model_directory", "auto_switch_model",
+    }
+    needs_restart = bool(set(data.keys()) & restart_keys)
+
+    if data:
+        current = read_proxy_settings()
+        current.update(data)
+        write_proxy_settings(current)
+    else:
+        current = read_proxy_settings()
+
+    if needs_restart:
+        with _lock:
+            if _is_running():
+                _proxy_process.terminate()
+                try:
+                    _proxy_process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    _proxy_process.kill()
+            _start_proxy_locked()
 
     return current
+
+
+@app.get("/models")
+def get_models():
+    """Return scanned model list with per-model config overlaid."""
+    model_configs = read_model_settings()
+    models = model_scanner.scan_models()
+    result = []
+    new_configs: dict = {}
+    for m in models:
+        entry = dict(m)
+        # Check quant-specific config first (e.g. "gemma-4-E2B-it-GGUF:BF16"),
+        # then fall back to bare base name (e.g. "gemma-4-E2B-it-GGUF").
+        cfg = model_configs.get(m["name"]) or model_configs.get(m["name"].split(":")[0]) or {}
+        entry["context_length"] = cfg.get("context_length", "")
+        entry["extra_args"] = cfg.get("extra_args", "")
+        entry["hidden"] = bool(cfg.get("hidden", False))
+        default_caps = ["completion", "tools"]
+        if m.get("is_vision"):
+            default_caps.append("vision")
+        entry["capabilities"] = cfg.get("capabilities") or default_caps
+
+        # Auto-populate model_settings.json for models with no existing config entry.
+        has_own_config = m["name"] in model_configs or m["name"].split(":")[0] in model_configs
+        if not has_own_config:
+            new_configs[m["name"]] = {
+                "context_length": 0,
+                "extra_args": "",
+                "capabilities": entry["capabilities"],
+                "hidden": False,
+            }
+
+        result.append(entry)
+
+    if new_configs:
+        model_configs.update(new_configs)
+        write_model_settings(model_configs)
+
+    return {"models": result}
 
 
 @app.get("/plugin.js")

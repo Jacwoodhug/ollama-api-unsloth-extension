@@ -1,6 +1,6 @@
 # Ollama API Unsloth Extension
 
-This extension for Unsloth Studio exposes a fully **Ollama-compatible API** on port `11434` (configurable), so any client that uses the Ollama API (VS Code Copilot, Open WebUI, Continue, etc.) can use your locally-running Unsloth models without any client-side changes.
+This extension for Unsloth Studio exposes a fully **Ollama-compatible API** proxy on port `11434` (configurable) so any client that uses the Ollama API (VS Code Copilot, Open WebUI, Continue, etc.) can use your locally-running Unsloth models without any client-side changes.
 
 A persistent manager server and in-browser plugin let you control the proxy and edit its settings directly from the Studio sidebar.
 

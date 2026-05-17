@@ -67,7 +67,7 @@
 
     overlay.innerHTML = `
       <div style="background:${dark ? '#1e1e2e' : '#ffffff'};color:${dark ? '#cdd6f4' : '#1e1e2e'};
-                  border-radius:12px;padding:24px;width:420px;max-width:95vw;box-shadow:0 8px 32px rgba(0,0,0,0.4);
+                  border-radius:12px;padding:24px;width:720px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.4);
                   font-family:system-ui,sans-serif;font-size:14px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
           <strong style="font-size:16px">Ollama Proxy</strong>
@@ -89,9 +89,9 @@
             <input id="op-base-url" type="text" style="${inputStyle(dark)}" placeholder="http://localhost:8888"/>
           </label>
           <label style="display:grid;gap:4px">API Key
-            <input id="op-api-key" type="password" style="${inputStyle(dark)}" placeholder="(leave blank if none)"/>
+            <input id="op-api-key" type="password" style="${inputStyle(dark)}" placeholder="Required" required/>
           </label>
-          <label style="display:grid;gap:4px">Context Length
+          <label style="display:grid;gap:4px">Default Context Length
             <input id="op-ctx-len" type="number" style="${inputStyle(dark)}" placeholder="32768"/>
           </label>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -106,6 +106,19 @@
             <input id="op-open-browser" type="checkbox" style="width:15px;height:15px;cursor:pointer"/>
             Open browser on startup
           </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input id="op-auto-switch" type="checkbox" style="width:15px;height:15px;cursor:pointer"/>
+            Auto-switch models (load on demand)
+          </label>
+        </div>
+
+        <div id="op-models-section" style="display:none">
+          <hr style="border:none;border-top:1px solid ${dark ? '#313244' : '#e0e0e0'};margin:16px 0"/>
+          <!-- Models section -->
+          <div>
+            <strong style="font-size:13px;opacity:0.8">Models</strong>
+            <div id="op-models-container" style="margin-top:8px;font-size:12px">Loading…</div>
+          </div>
         </div>
 
         <!-- Footer -->
@@ -132,6 +145,11 @@
     modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
     modal.querySelector('#op-toggle').addEventListener('click', onToggle);
     modal.querySelector('#op-save').addEventListener('click', onSave);
+    modal.querySelector('#op-auto-switch').addEventListener('change', (e) => {
+      const section = modal.querySelector('#op-models-section');
+      if (section) section.style.display = e.target.checked ? '' : 'none';
+      if (e.target.checked) loadModels();
+    });
 
     formPopulated = false;
     refreshStatus();
@@ -192,6 +210,11 @@
     set('#op-port', settings.proxy_port);
     const cb = modal.querySelector('#op-open-browser');
     if (cb && settings.open_browser_on_startup !== undefined) cb.checked = !!settings.open_browser_on_startup;
+    const cbSwitch = modal.querySelector('#op-auto-switch');
+    if (cbSwitch && settings.auto_switch_model !== undefined) cbSwitch.checked = !!settings.auto_switch_model;
+    const modelsSection = modal.querySelector('#op-models-section');
+    if (modelsSection) modelsSection.style.display = cbSwitch?.checked ? '' : 'none';
+    if (cbSwitch?.checked) loadModels();
   }
 
   async function onToggle() {
@@ -210,6 +233,12 @@
     const modal = document.getElementById('ollama-proxy-modal');
     if (!modal) return;
     const get = (id) => modal.querySelector(id)?.value;
+    const apiKey = get('#op-api-key');
+    if (!apiKey || !apiKey.trim()) {
+      const keyInput = modal.querySelector('#op-api-key');
+      if (keyInput) { keyInput.style.outline = '2px solid #ef4444'; keyInput.focus(); }
+      return;
+    }
     const payload = {
       unsloth_base_url: get('#op-base-url'),
       unsloth_api_key: get('#op-api-key'),
@@ -217,6 +246,7 @@
       proxy_host: get('#op-host'),
       proxy_port: parseInt(get('#op-port'), 10) || 11434,
       open_browser_on_startup: !!(modal.querySelector('#op-open-browser')?.checked),
+      auto_switch_model: !!(modal.querySelector('#op-auto-switch')?.checked),
     };
     try {
       await apiFetch('/settings', {
@@ -233,6 +263,135 @@
   }
 
   /* ------------------------------------------------------------------ */
+  /* Models section                                                       */
+  /* ------------------------------------------------------------------ */
+
+  async function loadModels() {
+    const modal = document.getElementById('ollama-proxy-modal');
+    if (!modal) return;
+    const container = modal.querySelector('#op-models-container');
+    if (!container) return;
+    const dark = isDark();
+    try {
+      const data = await apiFetch('/models');
+      const models = (data.models || []).slice().sort((a, b) => {
+        if (!!a.hidden !== !!b.hidden) return a.hidden ? 1 : -1;
+        return a.name.localeCompare(b.name);
+      });
+      if (models.length === 0) {
+        container.innerHTML = '<em>No models found in model directory.</em>';
+        return;
+      }
+      const thStyle = `padding:4px 8px;text-align:left;border-bottom:1px solid ${dark ? '#45475a' : '#d0d0d0'};font-weight:600`;
+      const tdStyle = `padding:4px 8px;vertical-align:middle`;
+      const capLabels = ['completion', 'tools', 'vision'];
+      let rows = models.map((m) => {
+          const caps = Array.isArray(m.capabilities) ? m.capabilities : ['completion', 'tools'];
+          const capChecks = capLabels.map((c) =>
+            `<label style="display:flex;align-items:center;gap:3px;font-size:11px;cursor:pointer;white-space:nowrap">
+              <input type="checkbox" data-cap="${c}" ${caps.includes(c) ? 'checked' : ''}
+                style="width:12px;height:12px;cursor:pointer"/>${c}
+            </label>`
+          ).join('');
+          return `
+          <tr data-model-name="${escHtml(m.name)}">
+            <td style="${tdStyle}">${escHtml(m.name)}</td>
+            <td style="${tdStyle}"><input type="number" data-field="context_length"
+              value="${escHtml(String(m.context_length || ''))}"
+              placeholder="default"
+              style="width:80px;padding:2px 6px;border-radius:4px;border:1px solid ${dark ? '#45475a' : '#d0d0d0'};background:${dark ? '#313244' : '#f8f8f8'};color:inherit;font-size:12px"/></td>
+            <td style="${tdStyle}"><input type="text" data-field="extra_args"
+              value="${escHtml(m.extra_args || '')}"
+              placeholder=""
+              style="width:140px;padding:2px 6px;border-radius:4px;border:1px solid ${dark ? '#45475a' : '#d0d0d0'};background:${dark ? '#313244' : '#f8f8f8'};color:inherit;font-size:12px"/></td>
+            <td style="${tdStyle};display:flex;flex-direction:column;gap:2px">${capChecks}</td>
+            <td style="${tdStyle};text-align:center"><input type="checkbox" data-field="hidden" ${m.hidden ? 'checked' : ''}
+              title="Hides the model from the API model list"
+              style="width:14px;height:14px;cursor:pointer"/></td>
+          </tr>`;
+        }).join('');
+      container.innerHTML = `
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr>
+            <th style="${thStyle}">Model</th>
+            <th style="${thStyle}">Context</th>
+            <th style="${thStyle}">Extra Load Args</th>
+            <th style="${thStyle}">Capabilities</th>
+            <th style="${thStyle};text-align:center" title="Hides the model from the API model list">Hide from API</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <div style="margin-top:8px;text-align:right">
+          <button id="op-save-models" style="padding:4px 14px;border-radius:6px;background:#7c3aed;color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:600">Save model settings</button>
+        </div>`;
+      container.querySelector('#op-save-models').addEventListener('click', saveModelConfigs);
+    } catch (e) {
+      container.innerHTML = '<em>Could not load model list.</em>';
+    }
+  }
+
+  function escHtml(str) {
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  async function saveModelConfigs() {
+    const modal = document.getElementById('ollama-proxy-modal');
+    if (!modal) return;
+    const rows = modal.querySelectorAll('#op-models-container tbody tr[data-model-name]');
+    const model_configs = {};
+    rows.forEach((row) => {
+      const name = row.getAttribute('data-model-name');
+      const ctxInput = row.querySelector('[data-field="context_length"]');
+      const argsInput = row.querySelector('[data-field="extra_args"]');
+      const ctx = ctxInput ? parseInt(ctxInput.value, 10) : 0;
+      const args = argsInput ? argsInput.value.trim() : '';
+      const capChecks = row.querySelectorAll('[data-cap]');
+      const capabilities = Array.from(capChecks)
+        .filter((cb) => cb.checked)
+        .map((cb) => cb.getAttribute('data-cap'));
+      const hiddenCb = row.querySelector('[data-field="hidden"]');
+      const hidden = hiddenCb ? hiddenCb.checked : false;
+      if (name) {
+        model_configs[name] = {
+          context_length: ctx || 0,
+          extra_args: args,
+          capabilities: capabilities.length > 0 ? capabilities : ['completion'],
+          hidden,
+        };
+      }
+    });
+    const btn = modal.querySelector('#op-save-models');
+    try {
+      await apiFetch('/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model_configs }),
+      });
+      if (btn) { btn.textContent = 'Saved!'; setTimeout(() => { btn.textContent = 'Save model settings'; loadModels(); }, 1500); }
+    } catch (e) {
+      console.error('[OllamaPlugin] saveModelConfigs error', e);
+      if (btn) { btn.textContent = 'Error'; setTimeout(() => { btn.textContent = 'Save model settings'; }, 1500); }
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Background model poll                                               */
+  /* ------------------------------------------------------------------ */
+
+  async function bgPollModels() {
+    try {
+      // Always fetch to trigger server-side auto-population of new models.
+      await fetch(MANAGER + '/models');
+      // If the models table is visible, refresh it too.
+      const modal = document.getElementById('ollama-proxy-modal');
+      if (modal) {
+        const section = modal.querySelector('#op-models-section');
+        if (section && section.style.display !== 'none') loadModels();
+      }
+    } catch (_) { /* manager not running, ignore */ }
+  }
+
+  /* ------------------------------------------------------------------ */
   /* Bootstrap                                                            */
   /* ------------------------------------------------------------------ */
 
@@ -243,4 +402,5 @@
   const observer = new MutationObserver(tryInject);
   observer.observe(document.body, { childList: true, subtree: true });
   tryInject();
+  setInterval(bgPollModels, 30000);
 })();

@@ -9,8 +9,9 @@
 !uninstall.ps1
 !uninstall.sh
 
-# Reignore settings.json
+# Reignore cache and settings
 ollama-api/settings.json
+ollama-api/model_settings.json
 ollama-api/__pycache__/
 
 # Whitelist root files

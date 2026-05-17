@@ -2,6 +2,7 @@
 FastAPI proxy: Ollama-compatible API → Unsloth (OpenAI-compatible) backend.
 """
 
+import glob as _glob
 import json
 import os
 from contextlib import asynccontextmanager
@@ -12,8 +13,9 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
+import model_scanner
 import translate
-from config import get_config_value, get_int_config_value
+from config import get_config_value, get_int_config_value, read_proxy_settings, read_model_settings
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -26,6 +28,90 @@ UNSLOTH_API_KEY: str = get_config_value("unsloth_api_key", "")
 PROXY_HOST: str = get_config_value("proxy_host", "0.0.0.0")
 PROXY_PORT: str = get_config_value("proxy_port", "11434")
 MODEL_CONTEXT_LENGTH: int = get_int_config_value("model_context_length", 32768)
+AUTO_SWITCH_MODEL: bool = get_config_value("auto_switch_model", "false").lower() == "true"
+
+
+# ---------------------------------------------------------------------------
+# Model directory helpers
+# ---------------------------------------------------------------------------
+
+def scan_model_directory() -> list[dict]:
+    """Fetch the model list from Studio's /api/models/local."""
+    return model_scanner.scan_models()
+
+
+def find_local_model(model_name: str) -> dict | None:
+    """Find a model by display name or full HF model_id.
+
+    Checks exact name first (supports quant-suffixed names like
+    'gemma-4-E2B-it-GGUF:BF16'), then falls back to the base name
+    (strip everything after ':') for bare model requests.
+    """
+    clean_base = model_name.split(":")[0]
+    fallback: dict | None = None
+    for m in scan_model_directory():
+        if m["name"] == model_name:
+            return m
+        if fallback is None and (m["name"] == clean_base or m.get("model_id") == clean_base):
+            fallback = m
+    return fallback
+
+
+def _resolve_quant_path(repo_path: str, filename: str) -> str:
+    """Return the full path to a specific .gguf file in the HF cache snapshot dir."""
+    pattern = os.path.join(repo_path, "snapshots", "*", filename)
+    matches = _glob.glob(pattern)
+    return matches[0] if matches else repo_path
+
+
+def _get_model_cfg(model_name: str) -> dict:
+    """Return model config dict, checking quant-specific key first then base name."""
+    configs = read_model_settings()
+    return configs.get(model_name) or configs.get(model_name.split(":")[0]) or {}
+
+
+def get_model_context(model_name: str) -> int:
+    """Return per-model context length, falling back to global MODEL_CONTEXT_LENGTH."""
+    return _get_model_cfg(model_name).get("context_length") or MODEL_CONTEXT_LENGTH
+
+
+async def ensure_model_loaded(client: httpx.AsyncClient, model_name: str) -> None:
+    """If model_name is not currently loaded in Studio, load it (and replace current)."""
+    local_model = find_local_model(model_name)
+    if local_model is None:
+        return  # not a local model — pass through, Studio will error if invalid
+
+    # Check currently loaded model and active quant via inference/status.
+    try:
+        status_resp = await client.get("/api/inference/status")
+        if status_resp.is_success:
+            st = status_resp.json()
+            if local_model["model_id"] in st.get("loaded", []):
+                wanted_quant = local_model.get("quant", "")
+                active_quant = st.get("gguf_variant", "")
+                if not wanted_quant or wanted_quant == active_quant:
+                    return  # already loaded with the right quant
+    except Exception:
+        pass
+
+    cfg = _get_model_cfg(model_name)
+    context = cfg.get("context_length") or MODEL_CONTEXT_LENGTH
+    extra_args_str = cfg.get("extra_args", "")
+    extra_args = extra_args_str.split() if extra_args_str.strip() else None
+
+    model_path = local_model["path"]
+    quant_filename = local_model.get("quant_filename", "")
+    if quant_filename:
+        model_path = _resolve_quant_path(model_path, quant_filename)
+
+    load_req: dict = {"model_path": model_path, "max_seq_length": context}
+    if extra_args and local_model["is_gguf"]:
+        load_req["llama_extra_args"] = extra_args
+
+    try:
+        await client.post("/v1/load", json=load_req, timeout=300.0)
+    except Exception:
+        pass  # let the subsequent chat request surface the error naturally
 
 
 # ---------------------------------------------------------------------------
@@ -223,6 +309,8 @@ async def api_chat(request: Request):
     oai_request = translate.ollama_chat_to_openai(body)
     oai_request["stream"] = stream
     client: httpx.AsyncClient = request.app.state.client
+    if AUTO_SWITCH_MODEL:
+        await ensure_model_loaded(client, model)
 
     if stream:
         async def _stream() -> AsyncGenerator[bytes, None]:
@@ -251,6 +339,8 @@ async def api_generate(request: Request):
     oai_request = translate.ollama_generate_to_openai(body)
     oai_request["stream"] = stream
     client: httpx.AsyncClient = request.app.state.client
+    if AUTO_SWITCH_MODEL:
+        await ensure_model_loaded(client, model)
 
     if stream:
         async def _stream() -> AsyncGenerator[bytes, None]:
@@ -273,6 +363,10 @@ async def api_generate(request: Request):
 
 @app.get("/api/tags")
 async def api_tags(request: Request):
+    if AUTO_SWITCH_MODEL:
+        configs = read_model_settings()
+        models = [m for m in scan_model_directory() if not configs.get(m["name"], {}).get("hidden")]
+        return translate.local_models_to_ollama_tags(models)
     client: httpx.AsyncClient = request.app.state.client
     response = await _proxy_get(client, "/v1/models")
     return translate.openai_models_to_ollama_tags(response.json())
@@ -289,9 +383,20 @@ async def api_ps(request: Request):
 async def api_show(request: Request):
     body = await request.json()
     name: str = body.get("model") or body.get("name", "")
+    context = get_model_context(name)
+    clean = name.split(":")[0]
+    cfg = _get_model_cfg(name)
+    caps_override: list | None = cfg.get("capabilities") or None
     client: httpx.AsyncClient = request.app.state.client
-    response = await _proxy_get(client, "/v1/models")
-    result = translate.openai_models_to_ollama_show(response.json(), name, MODEL_CONTEXT_LENGTH)
+    try:
+        response = await _proxy_get(client, "/v1/models")
+        result = translate.openai_models_to_ollama_show(response.json(), name, context, caps_override)
+    except Exception:
+        result = None
+    if result is None:
+        local = find_local_model(name)
+        if local:
+            result = translate.local_model_to_ollama_show(local, name, context, caps_override)
     if result is None:
         return JSONResponse({"error": "model not found"}, status_code=404)
     return result
@@ -381,6 +486,8 @@ async def v1_chat_completions(request: Request):
         parsed = {}
     stream: bool = parsed.get("stream", False)
     client: httpx.AsyncClient = request.app.state.client
+    if AUTO_SWITCH_MODEL:
+        await ensure_model_loaded(client, parsed.get("model", ""))
 
     if stream:
         async def _stream() -> AsyncGenerator[bytes, None]:

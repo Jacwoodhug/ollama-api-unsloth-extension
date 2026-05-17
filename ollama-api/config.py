@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 
 SETTINGS_PATH: Path = Path(__file__).parent / "settings.json"
+MODEL_SETTINGS_PATH: Path = Path(__file__).parent / "model_settings.json"
 
 _DEFAULTS: dict = {
     "unsloth_base_url": "http://localhost:8888",
@@ -17,6 +18,8 @@ _DEFAULTS: dict = {
     "proxy_host": "0.0.0.0",
     "proxy_port": 11434,
     "open_browser_on_startup": False,
+    "model_directory": "",
+    "auto_switch_model": False,
 }
 
 _KEY_TO_ENV: dict[str, str] = {
@@ -26,6 +29,8 @@ _KEY_TO_ENV: dict[str, str] = {
     "proxy_host": "PROXY_HOST",
     "proxy_port": "PROXY_PORT",
     "open_browser_on_startup": "OPEN_BROWSER_ON_STARTUP",
+    "model_directory": "MODEL_DIRECTORY",
+    "auto_switch_model": "AUTO_SWITCH_MODEL",
 }
 
 
@@ -36,9 +41,16 @@ def read_proxy_settings() -> dict:
         return dict(_DEFAULTS)
     try:
         with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
     except (json.JSONDecodeError, IOError):
         return {}
+    # One-time migration: move model_configs out to model_settings.json.
+    if "model_configs" in data:
+        if not MODEL_SETTINGS_PATH.exists():
+            write_model_settings(data["model_configs"])
+        del data["model_configs"]
+        write_proxy_settings(data)
+    return data
 
 
 def write_proxy_settings(data: dict) -> None:
@@ -50,6 +62,34 @@ def write_proxy_settings(data: dict) -> None:
         with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
         os.replace(tmp_path, SETTINGS_PATH)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def read_model_settings() -> dict:
+    """Load model_settings.json; return {} if it does not exist."""
+    if not MODEL_SETTINGS_PATH.exists():
+        return {}
+    try:
+        with open(MODEL_SETTINGS_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return {}
+
+
+def write_model_settings(data: dict) -> None:
+    """Atomically write data to model_settings.json."""
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        dir=MODEL_SETTINGS_PATH.parent, suffix=".tmp"
+    )
+    try:
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp_path, MODEL_SETTINGS_PATH)
     except Exception:
         try:
             os.unlink(tmp_path)

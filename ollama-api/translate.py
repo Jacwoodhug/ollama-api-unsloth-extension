@@ -305,7 +305,7 @@ def assemble_tool_calls(accumulated: list) -> list:
 # Model list translators
 # ---------------------------------------------------------------------------
 
-def _guess_details(model_id: str) -> dict:
+def _guess_details(model_id: str, fmt: str = "") -> dict:
     """Infer Ollama-style model details from an OpenAI model ID string."""
     name = model_id.lower()
     if "qwen3" in name:
@@ -328,16 +328,21 @@ def _guess_details(model_id: str) -> dict:
         family = "gemini"
     else:
         family = ""
-    quant = ""
-    for q in ["Q8_0", "Q6_K", "Q5_K_M", "Q5_K_S", "Q4_K_M", "Q4_K_S",
-              "Q4_0", "Q3_K_M", "Q2_K", "IQ4_XS", "IQ3_M", "F16", "BF16", "F32"]:
-        if q.upper() in model_id.upper():
-            quant = q
-            break
-    fmt = "gguf" if "gguf" in name else ""
+    # Prefer the explicit quant tag suffix (e.g. "gemma-4-E2B-it-GGUF:UD-Q4_K_XL")
+    # over guessing from the model ID string, since the suffix is unambiguous.
+    if ":" in model_id:
+        quant = model_id.split(":", 1)[1]
+    else:
+        quant = ""
+        for q in ["Q8_0", "Q6_K", "Q5_K_M", "Q5_K_S", "Q4_K_M", "Q4_K_S",
+                  "Q4_0", "Q3_K_M", "Q2_K", "IQ4_XS", "IQ3_M", "F16", "BF16", "F32"]:
+            if q.upper() in model_id.upper():
+                quant = q
+                break
+    resolved_fmt = fmt if fmt else ("gguf" if "gguf" in name else "")
     return {
         "parent_model": "",
-        "format": fmt,
+        "format": resolved_fmt,
         "family": family,
         "families": [family] if family else [],
         "parameter_size": "",
@@ -379,7 +384,7 @@ def openai_models_to_ollama_ps(oai: dict) -> dict:
     return {"models": models}
 
 
-def openai_models_to_ollama_show(oai: dict, name: str, context_length: int = 32768) -> Optional[dict]:
+def openai_models_to_ollama_show(oai: dict, name: str, context_length: int = 32768, capabilities: Optional[list] = None) -> Optional[dict]:
     """Find a model by name and return an Ollama /api/show response, or None."""
     # Strip Ollama tag suffix (e.g. "llama3:latest" -> "llama3") for fallback matching
     base_name = name.split(":")[0]
@@ -398,7 +403,53 @@ def openai_models_to_ollama_show(oai: dict, name: str, context_length: int = 327
                 "template": "",
                 "details": details,
                 "model_info": model_info,
-                "capabilities": ["completion", "tools"],
+                "capabilities": capabilities if capabilities is not None else ["completion", "tools"],
                 "name": name,
             }
     return None
+
+
+def _path_mtime_iso(mtime: float) -> str:
+    """Convert a file mtime (float) to an ISO 8601 string with Z suffix."""
+    return datetime.fromtimestamp(mtime, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def local_models_to_ollama_tags(local_models: list[dict]) -> dict:
+    """Convert scanned local model dicts to Ollama /api/tags format."""
+    models = []
+    for m in local_models:
+        name = m["name"]
+        details = _guess_details(name, fmt=m.get("format", ""))
+        models.append({
+            "name": name,
+            "model": name,
+            "modified_at": _path_mtime_iso(m.get("mtime", 0.0)),
+            "size": m.get("size_bytes", 0),
+            "digest": "",
+            "details": details,
+        })
+    return {"models": models}
+
+
+def local_model_to_ollama_show(local_model: dict, name: str, context_length: int, capabilities: Optional[list] = None) -> dict:
+    """Build /api/show response for a locally found but not-yet-loaded model."""
+    fmt = local_model.get("format", "")
+    details = _guess_details(name, fmt=fmt)
+    arch = details.get("family", "")
+    model_info: dict = {"llm.context_length": context_length}
+    if arch:
+        model_info["general.architecture"] = arch
+        model_info[f"{arch}.context_length"] = context_length
+    if capabilities is None:
+        capabilities = ["completion", "tools"]
+        if local_model.get("is_vision"):
+            capabilities.append("vision")
+    return {
+        "modelfile": "",
+        "parameters": "",
+        "template": "",
+        "details": details,
+        "model_info": model_info,
+        "capabilities": capabilities,
+        "name": name,
+    }
