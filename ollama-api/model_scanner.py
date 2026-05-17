@@ -118,10 +118,15 @@ def scan_models() -> list[dict]:
                         downloaded.add(rid)
                         size_map[rid] = entry.get("size_bytes", 0)
 
+            # If both cached endpoints failed or returned nothing, the Studio
+            # version running (common on Linux) may not support these endpoints.
+            # Fall back to showing all local models rather than filtering everything out.
+            use_download_filter = bool(downloaded)
+
             results = []
             for m in local_data.get("models", []):
                 model_id = m.get("model_id") or m.get("id", "")
-                if model_id not in downloaded:
+                if use_download_filter and model_id not in downloaded:
                     continue
                 base_entry = _map_model(m)
                 base_entry["size_bytes"] = size_map.get(model_id, 0)
