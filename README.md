@@ -44,7 +44,7 @@ Unsloth Studio (your local model)
 
 1. **Clone this repo** into the same folder that contains your `studio/` and `llama.cpp/` directories:
    ```powershell
-   git clone <repo-url> .
+   git clone https://github.com/Jacwoodhug/ollama-api-unsloth-extension.git .
    ```
 
 2. **Launch** — everything else is automatic:
