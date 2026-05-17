@@ -12,7 +12,7 @@ SETTINGS_PATH: Path = Path(__file__).parent / "settings.json"
 MODEL_SETTINGS_PATH: Path = Path(__file__).parent / "model_settings.json"
 
 _DEFAULTS: dict = {
-    "unsloth_base_url": "http://localhost:8888",
+    "unsloth_base_url": "http://127.0.0.1:8888",
     "unsloth_api_key": "",
     "model_context_length": 32768,
     "proxy_host": "0.0.0.0",

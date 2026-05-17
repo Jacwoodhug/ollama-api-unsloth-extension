@@ -8,7 +8,7 @@ import sys
 from config import read_proxy_settings, write_proxy_settings, SETTINGS_PATH
 
 _DEFAULTS = {
-    "unsloth_base_url": "http://localhost:8888",
+    "unsloth_base_url": "http://127.0.0.1:8888",
     "unsloth_api_key": "",
     "model_context_length": 32768,
     "proxy_host": "0.0.0.0",
@@ -18,7 +18,7 @@ _DEFAULTS = {
 
 def main():
     base_url_input = input(
-        "Enter Unsloth base URL (or press Enter for default http://localhost:8888): "
+        "Enter Unsloth base URL (or press Enter for default http://127.0.0.1:8888): "
     ).strip()
     api_key_input = input(
         "Enter your Unsloth API key (or press Enter to skip): "
