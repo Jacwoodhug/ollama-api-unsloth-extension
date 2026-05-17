@@ -64,7 +64,6 @@ Unsloth Studio (your local model)
    - Install proxy dependencies (`fastapi`, `httpx`, `uvicorn`, `python-dotenv`) into Unsloth's Python environment
    - Inject the Ollama Proxy plugin into the Studio WebUI
    - Start the manager, proxy, and Unsloth Studio
-   - Open `http://127.0.0.1:8888` in your browser after 5 seconds
 
 ---
 
