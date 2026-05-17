@@ -23,7 +23,7 @@ from config import get_config_value, get_int_config_value, read_proxy_settings, 
 
 load_dotenv()
 
-UNSLOTH_BASE_URL: str = get_config_value("unsloth_base_url", "http://localhost:8888")
+UNSLOTH_BASE_URL: str = get_config_value("unsloth_base_url", "http://127.0.0.1:8888")
 UNSLOTH_API_KEY: str = get_config_value("unsloth_api_key", "")
 PROXY_HOST: str = get_config_value("proxy_host", "0.0.0.0")
 PROXY_PORT: str = get_config_value("proxy_port", "11434")

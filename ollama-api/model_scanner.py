@@ -88,7 +88,7 @@ def scan_models() -> list[dict]:
     if _cache is not None and (now - _cache[0]) < _CACHE_TTL:
         return _cache[1]
 
-    base_url = get_config_value("unsloth_base_url", "http://localhost:8888")
+    base_url = get_config_value("unsloth_base_url", "http://127.0.0.1:8888")
     api_key = get_config_value("unsloth_api_key", "")
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
 

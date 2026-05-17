@@ -8,13 +8,13 @@ INDEX="$(find "$ROOT/studio/unsloth_studio/lib" -path "*/studio/frontend/dist/in
 # 1. Remove injected plugin tag from Studio WebUI
 if [[ -z "$INDEX" || ! -f "$INDEX" ]]; then
     echo "[UNINSTALL] index.html not found — skipping WebUI cleanup"
-elif ! grep -q 'localhost:11435/plugin\.js' "$INDEX"; then
+elif ! grep -q '11435/plugin\.js' "$INDEX"; then
     echo "[UNINSTALL] Plugin tag not found in index.html — skipping"
 else
     "$PYTHON" -c "
-content = open('$INDEX', encoding='utf-8').read()
-tag = '<script src=\"http://localhost:11435/plugin.js\" defer></script>'
-open('$INDEX', 'w', encoding='utf-8').write(content.replace(tag + '\n', '').replace(tag, ''))
+lines = open('$INDEX', encoding='utf-8').readlines()
+lines = [l for l in lines if '11435/plugin.js' not in l]
+open('$INDEX', 'w', encoding='utf-8').write(''.join(lines))
 "
     echo "[UNINSTALL] Removed Ollama proxy plugin from Studio WebUI"
 fi
