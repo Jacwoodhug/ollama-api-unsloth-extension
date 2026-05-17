@@ -35,7 +35,6 @@ Unsloth Studio (your local model)
 
 - Windows 10/11 or Linux
 - [Unsloth Studio](https://unsloth.ai) installed with its bundled Python environment inside `studio/unsloth_studio/`
-- [llama.cpp](https://github.com/ggerganov/llama.cpp) server binary at `llama.cpp/llama-server` (Linux) or `llama.cpp/llama-server.exe` (Windows)
 - Linux only: `lsof` available (pre-installed on most distros)
 
 ---
