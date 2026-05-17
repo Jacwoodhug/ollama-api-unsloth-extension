@@ -35,7 +35,7 @@ fi
 "$PYTHON" "$ROOT/ollama-api/manager.py" &
 MANAGER_PID=$!
 
-"$ROOT/studio/unsloth_studio/bin/unsloth" studio -p 8888 2>&1 | \
+"$ROOT/studio/unsloth_studio/bin/unsloth" studio -p 8888 -H 0.0.0.0 2>&1 | \
     while IFS= read -r line; do echo "[UNSLOTH] $line"; done &
 UNSLOTH_PID=$!
 
