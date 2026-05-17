@@ -46,6 +46,8 @@ Unsloth Studio (your local model)
    git clone https://github.com/Jacwoodhug/ollama-api-unsloth-extension.git .
    ```
 
+   > **Linux note:** The Unsloth install directory is `~/.unsloth/`, which is hidden from `ls` because of the leading `.`. Use `ls -a ~` or `cd ~/.unsloth` to locate it.
+
 2. **Launch** — everything else is automatic:
 
    **Windows:**

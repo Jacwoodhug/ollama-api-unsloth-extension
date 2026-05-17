@@ -19,13 +19,20 @@ open('$INDEX', 'w', encoding='utf-8').write(content.replace(tag + '\n', '').repl
     echo "[UNINSTALL] Removed Ollama proxy plugin from Studio WebUI"
 fi
 
-# 2. Remove ollama-api folder
+# 2. Uninstall proxy requirements from studio Python
+if [[ -f "$ROOT/ollama-api/requirements.txt" ]]; then
+    echo "[UNINSTALL] Removing ollama-api dependencies..."
+    "$PYTHON" -m pip uninstall -y -r "$ROOT/ollama-api/requirements.txt" --quiet
+    echo "[UNINSTALL] Removed ollama-api dependencies"
+fi
+
+# 3. Remove ollama-api folder
 if [[ -d "$ROOT/ollama-api" ]]; then
     rm -rf "$ROOT/ollama-api"
     echo "[UNINSTALL] Removed ollama-api/"
 fi
 
-# 3. Remove launch scripts and the other uninstall script
+# 4. Remove launch scripts and the other uninstall script
 for file in launch-unsloth.ps1 launch-unsloth.sh uninstall.ps1; do
     if [[ -f "$ROOT/$file" ]]; then
         rm -f "$ROOT/$file"
@@ -33,4 +40,7 @@ for file in launch-unsloth.ps1 launch-unsloth.sh uninstall.ps1; do
     fi
 done
 
-echo "[UNINSTALL] Done. You can now delete this script."
+echo "[UNINSTALL] Done."
+
+# Self-delete
+rm -f "$(realpath "$0")"

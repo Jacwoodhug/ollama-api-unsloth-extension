@@ -13,13 +13,22 @@ if (-not (Test-Path $INDEX)) {
     Write-Host "[UNINSTALL] Removed Ollama proxy plugin from Studio WebUI"
 }
 
-# 2. Remove ollama-api folder
+# 2. Uninstall proxy requirements from studio Python
+$PYTHON = "$ROOT\studio\unsloth_studio\Scripts\python.exe"
+$REQS   = "$ROOT\ollama-api\requirements.txt"
+if ((Test-Path $PYTHON) -and (Test-Path $REQS)) {
+    Write-Host "[UNINSTALL] Removing ollama-api dependencies..."
+    & $PYTHON -m pip uninstall -y -r $REQS --quiet
+    Write-Host "[UNINSTALL] Removed ollama-api dependencies"
+}
+
+# 3. Remove ollama-api folder
 if (Test-Path "$ROOT\ollama-api") {
     Remove-Item "$ROOT\ollama-api" -Recurse -Force
     Write-Host "[UNINSTALL] Removed ollama-api/"
 }
 
-# 3. Remove launch scripts and the other uninstall script
+# 4. Remove launch scripts and the other uninstall script
 foreach ($file in 'launch-unsloth.ps1', 'launch-unsloth.sh', 'uninstall.sh') {
     $path = "$ROOT\$file"
     if (Test-Path $path) {
@@ -28,4 +37,7 @@ foreach ($file in 'launch-unsloth.ps1', 'launch-unsloth.sh', 'uninstall.sh') {
     }
 }
 
-Write-Host "[UNINSTALL] Done. You can now delete this script."
+Write-Host "[UNINSTALL] Done."
+
+# Self-delete
+Remove-Item $MyInvocation.MyCommand.Path -Force
