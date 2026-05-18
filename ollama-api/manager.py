@@ -4,7 +4,9 @@ Runs on port 11435 (configurable via MANAGER_PORT env var).
 Manages the lifecycle of main.py (the proxy) as a subprocess.
 """
 
+import atexit
 import os
+import signal
 import subprocess
 import sys
 import threading
@@ -34,6 +36,28 @@ app.add_middleware(
 
 _lock = threading.Lock()
 _proxy_process: subprocess.Popen | None = None
+
+
+def _stop_proxy() -> None:
+    """Terminate the proxy subprocess gracefully, then force-kill if needed."""
+    global _proxy_process
+    proc = _proxy_process
+    if proc is None or proc.poll() is not None:
+        return
+    proc.terminate()
+    try:
+        proc.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+    _proxy_process = None
+
+
+atexit.register(_stop_proxy)
+
+# On POSIX, SIGTERM does not trigger atexit by default — install a handler that
+# calls sys.exit() so the atexit chain runs and the proxy is cleaned up.
+if hasattr(signal, "SIGTERM"):
+    signal.signal(signal.SIGTERM, lambda _sig, _frame: sys.exit(0))
 
 
 def _read_proxy_stdout(proc: subprocess.Popen) -> None:

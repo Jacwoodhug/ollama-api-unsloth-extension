@@ -88,7 +88,7 @@
           <label style="display:grid;gap:4px">Base URL
             <input id="op-base-url" type="text" style="${inputStyle(dark)}" placeholder="http://localhost:8888"/>
           </label>
-          <label style="display:grid;gap:4px">API Key
+          <label style="display:grid;gap:4px">Unsloth API Key
             <input id="op-api-key" type="password" style="${inputStyle(dark)}" placeholder="Required" required/>
           </label>
           <label style="display:grid;gap:4px">Default Context Length
@@ -136,7 +136,33 @@
             background:${dark ? '#313244' : '#f8f8f8'};color:inherit;font-size:13px;width:100%;box-sizing:border-box`;
   }
 
+  function isMobile() {
+    return window.innerWidth <= 768;
+  }
+
+  function closeSidebar() {
+    // shadcn/ui sidebar trigger button
+    const trigger = document.querySelector('[data-sidebar="trigger"]');
+    if (trigger) { trigger.click(); return; }
+    // radix Sheet close button (mobile sheet variant)
+    const sheetClose = document.querySelector('[data-radix-dialog-close]');
+    if (sheetClose) { sheetClose.click(); return; }
+    // fallback: Escape on the sidebar element to dismiss the Sheet
+    const sidebar = document.querySelector('[data-sidebar="sidebar"]');
+    if (sidebar) sidebar.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  }
+
   function openModal() {
+    if (document.getElementById('ollama-proxy-modal')) return;
+    if (isMobile()) {
+      closeSidebar();
+      setTimeout(doOpenModal, 250);
+      return;
+    }
+    doOpenModal();
+  }
+
+  function doOpenModal() {
     if (document.getElementById('ollama-proxy-modal')) return;
     const modal = buildModal();
     document.body.appendChild(modal);

@@ -65,6 +65,8 @@ Unsloth Studio (your local model)
    - Inject the Ollama Proxy plugin into the Studio WebUI
    - Start the manager, proxy, and Unsloth Studio
 
+   Generate an API for the proxy to use in Unsloth then add it to the API Key field in the Ollama Proxy menu.
+
 ---
 
 ## Model List & Auto-Switch

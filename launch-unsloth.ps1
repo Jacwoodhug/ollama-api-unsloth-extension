@@ -47,7 +47,7 @@ $managerJob = Start-Job -ScriptBlock {
 $unslothJob = Start-Job -ScriptBlock {
     param($root)
     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-    & "$root\studio\unsloth_studio\Scripts\unsloth.exe" studio -p 8888 2>&1
+    & "$root\studio\unsloth_studio\Scripts\unsloth.exe" studio -p 8888 -H 0.0.0.0 2>&1
 } -ArgumentList $ROOT
 
 # 5. Relay output: manager self-labels [PROXY] lines; PS1 adds [UNSLOTH] to unsloth
@@ -60,6 +60,21 @@ try {
     }
 } finally {
     Write-Host "[SETUP] Stopping manager and proxy..."
+
+    # Stop jobs gracefully first — Stop-Job signals the job runspace, which propagates
+    # termination to the Python child. The manager's atexit handler then kills the proxy.
+    Stop-Job $managerJob, $unslothJob -ErrorAction SilentlyContinue
+
+    # Give the manager up to 3 seconds to exit and clean up its proxy child.
+    $deadline = (Get-Date).AddSeconds(3)
+    while ((Get-Date) -lt $deadline) {
+        $managerDone = $managerJob.State -ne 'Running'
+        $unslothDone = $unslothJob.State -ne 'Running'
+        if ($managerDone -and $unslothDone) { break }
+        Start-Sleep -Milliseconds 200
+    }
+
+    # Fall back: force-kill anything still listening on the relevant ports.
     $proxyPort = 11434
     $settingsFile = "$ROOT\ollama-api\settings.json"
     if (Test-Path $settingsFile) {
@@ -69,5 +84,6 @@ try {
         $conn = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
         if ($conn) { Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue }
     }
+
     Remove-Job $managerJob, $unslothJob -Force -ErrorAction SilentlyContinue
 }
