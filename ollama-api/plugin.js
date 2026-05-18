@@ -10,6 +10,7 @@
   const PLUGIN_ATTR = 'data-ollama-plugin';
   let pollTimer = null;
   let formPopulated = false;
+  let maskedKey = '';
 
   /* ------------------------------------------------------------------ */
   /* Utilities                                                            */
@@ -178,6 +179,7 @@
     });
 
     formPopulated = false;
+    maskedKey = '';
     refreshStatus();
     pollTimer = setInterval(refreshStatus, 2000);
   }
@@ -230,7 +232,8 @@
     if (!modal) return;
     const set = (id, val) => { const el = modal.querySelector(id); if (el && val !== undefined) el.value = val; };
     set('#op-base-url', settings.unsloth_base_url);
-    set('#op-api-key', settings.unsloth_api_key);
+    maskedKey = settings.unsloth_api_key || '';
+    set('#op-api-key', maskedKey);
     set('#op-ctx-len', settings.model_context_length);
     set('#op-host', settings.proxy_host);
     set('#op-port', settings.proxy_port);
@@ -259,27 +262,29 @@
     const modal = document.getElementById('ollama-proxy-modal');
     if (!modal) return;
     const get = (id) => modal.querySelector(id)?.value;
-    const apiKey = get('#op-api-key');
-    if (!apiKey || !apiKey.trim()) {
+    const apiKeyVal = (get('#op-api-key') || '').trim();
+    const keyProvided = apiKeyVal && apiKeyVal !== maskedKey;
+    if (!keyProvided && !maskedKey) {
       const keyInput = modal.querySelector('#op-api-key');
       if (keyInput) { keyInput.style.outline = '2px solid #ef4444'; keyInput.focus(); }
       return;
     }
     const payload = {
       unsloth_base_url: get('#op-base-url'),
-      unsloth_api_key: get('#op-api-key'),
       model_context_length: parseInt(get('#op-ctx-len'), 10) || 32768,
       proxy_host: get('#op-host'),
       proxy_port: parseInt(get('#op-port'), 10) || 11434,
       open_browser_on_startup: !!(modal.querySelector('#op-open-browser')?.checked),
       auto_switch_model: !!(modal.querySelector('#op-auto-switch')?.checked),
     };
+    if (keyProvided) payload.unsloth_api_key = apiKeyVal;
     try {
       await apiFetch('/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+      if (keyProvided) maskedKey = '*'.repeat(apiKeyVal.length);
       const saveBtn = modal.querySelector('#op-save');
       saveBtn.textContent = 'Restarting…';
       setTimeout(() => { saveBtn.textContent = 'Save'; refreshStatus(); }, 2000);

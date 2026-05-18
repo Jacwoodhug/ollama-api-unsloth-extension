@@ -52,12 +52,14 @@ def _stop_proxy() -> None:
     _proxy_process = None
 
 
-atexit.register(_stop_proxy)
-
-# On POSIX, SIGTERM does not trigger atexit by default — install a handler that
-# calls sys.exit() so the atexit chain runs and the proxy is cleaned up.
-if hasattr(signal, "SIGTERM"):
-    signal.signal(signal.SIGTERM, lambda _sig, _frame: sys.exit(0))
+# On POSIX: register atexit + SIGTERM handler so the proxy is cleaned up when
+# the manager exits. Guarded to non-Windows because on Windows the console
+# process-group interaction with VS Code's integrated terminal causes it to
+# crash; the PS1 launch script handles cleanup via port-scan instead.
+if os.name != "nt":
+    atexit.register(_stop_proxy)
+    if hasattr(signal, "SIGTERM"):
+        signal.signal(signal.SIGTERM, lambda _sig, _frame: sys.exit(0))
 
 
 def _read_proxy_stdout(proc: subprocess.Popen) -> None:
@@ -96,6 +98,14 @@ def _auto_start_proxy() -> None:
     print("[MANAGER] Proxy auto-started on startup.", flush=True)
 
 
+def _sanitize_settings(settings: dict) -> dict:
+    """Return a copy of settings with unsloth_api_key replaced by a length-masked string."""
+    out = dict(settings)
+    raw_key = out.pop("unsloth_api_key", "")
+    out["unsloth_api_key"] = "*" * len(raw_key) if raw_key else ""
+    return out
+
+
 @app.get("/status")
 def get_status():
     settings = read_proxy_settings()
@@ -106,7 +116,7 @@ def get_status():
         "running": running,
         "pid": pid,
         "port": settings.get("proxy_port", 11434),
-        "settings": settings,
+        "settings": _sanitize_settings(settings),
     }
 
 
@@ -137,7 +147,7 @@ def stop_proxy():
 
 @app.get("/settings")
 def get_settings():
-    return read_proxy_settings()
+    return _sanitize_settings(read_proxy_settings())
 
 
 @app.put("/settings")
@@ -155,19 +165,29 @@ def put_settings(data: dict):
     if "model_configs" in data:
         write_model_settings(data.pop("model_configs"))
 
+    # Pop key now so needs_restart accounts for it without merging it blindly.
+    incoming_key = data.pop("unsloth_api_key", None)
+    key_changing = bool(incoming_key)
+
     restart_keys = {
         "unsloth_base_url", "unsloth_api_key", "model_context_length",
         "proxy_host", "proxy_port", "open_browser_on_startup",
         "model_directory", "auto_switch_model",
     }
-    needs_restart = bool(set(data.keys()) & restart_keys)
+    needs_restart = key_changing or bool(set(data.keys()) & restart_keys)
 
-    if data:
-        current = read_proxy_settings()
-        current.update(data)
-        write_proxy_settings(current)
-    else:
-        current = read_proxy_settings()
+    current = read_proxy_settings()
+
+    if key_changing:
+        current["unsloth_api_key"] = incoming_key
+    elif not current.get("unsloth_api_key"):
+        raise HTTPException(
+            status_code=422,
+            detail="unsloth_api_key is required when no key is stored yet",
+        )
+
+    current.update(data)
+    write_proxy_settings(current)
 
     if needs_restart:
         with _lock:
@@ -179,7 +199,7 @@ def put_settings(data: dict):
                     _proxy_process.kill()
             _start_proxy_locked()
 
-    return current
+    return _sanitize_settings(current)
 
 
 @app.get("/models")

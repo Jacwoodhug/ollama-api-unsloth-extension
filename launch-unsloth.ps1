@@ -60,21 +60,6 @@ try {
     }
 } finally {
     Write-Host "[SETUP] Stopping manager and proxy..."
-
-    # Stop jobs gracefully first — Stop-Job signals the job runspace, which propagates
-    # termination to the Python child. The manager's atexit handler then kills the proxy.
-    Stop-Job $managerJob, $unslothJob -ErrorAction SilentlyContinue
-
-    # Give the manager up to 3 seconds to exit and clean up its proxy child.
-    $deadline = (Get-Date).AddSeconds(3)
-    while ((Get-Date) -lt $deadline) {
-        $managerDone = $managerJob.State -ne 'Running'
-        $unslothDone = $unslothJob.State -ne 'Running'
-        if ($managerDone -and $unslothDone) { break }
-        Start-Sleep -Milliseconds 200
-    }
-
-    # Fall back: force-kill anything still listening on the relevant ports.
     $proxyPort = 11434
     $settingsFile = "$ROOT\ollama-api\settings.json"
     if (Test-Path $settingsFile) {
@@ -82,8 +67,14 @@ try {
     }
     foreach ($port in 8888, 11435, $proxyPort) {
         $conn = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
-        if ($conn) { Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue }
+        if ($conn) {
+            # Only kill Python processes — the VS Code extension host (Node.js) also
+            # listens on port 11434 and must not be touched.
+            $proc = Get-Process -Id $conn.OwningProcess -ErrorAction SilentlyContinue
+            if ($proc -and $proc.Name -match 'python') {
+                Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue
+            }
+        }
     }
-
-    Remove-Job $managerJob, $unslothJob -Force -ErrorAction SilentlyContinue
+    Remove-Job $managerJob, $unslothJob -ErrorAction SilentlyContinue
 }

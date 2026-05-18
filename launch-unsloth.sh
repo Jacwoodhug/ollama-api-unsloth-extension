@@ -58,23 +58,14 @@ UNSLOTH_PID=$!
 cleanup() {
     echo "[SETUP] Stopping manager and proxy..."
 
-    # Ask the manager to exit gracefully — its atexit handler will terminate the proxy.
-    if kill -0 "$MANAGER_PID" 2>/dev/null; then
-        kill "$MANAGER_PID" 2>/dev/null || true
-        # Wait up to 3 seconds for the manager (and its proxy child) to exit.
-        DEADLINE=$((SECONDS + 3))
-        while [[ $SECONDS -lt $DEADLINE ]]; do
-            kill -0 "$MANAGER_PID" 2>/dev/null || break
-            sleep 0.2
-        done
-    fi
+    # SIGTERM the manager — its atexit handler will terminate the proxy.
+    kill "$MANAGER_PID" 2>/dev/null || true
+    kill "$UNSLOTH_PID" 2>/dev/null || true
 
-    # Also signal unsloth directly so it doesn't linger.
-    if kill -0 "$UNSLOTH_PID" 2>/dev/null; then
-        kill "$UNSLOTH_PID" 2>/dev/null || true
-    fi
+    # Give them a moment to exit cleanly, then force-kill by port.
+    sleep 1
 
-    # Fall back: force-kill anything still listening on the relevant ports.
+    # Force-kill anything still listening on the relevant ports.
     PROXY_PORT=11434
     SETTINGS="$ROOT/ollama-api/settings.json"
     if [[ -f "$SETTINGS" ]]; then
