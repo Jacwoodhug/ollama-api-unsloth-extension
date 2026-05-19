@@ -4,6 +4,7 @@ No network calls, no FastAPI/httpx imports. Standard library only.
 """
 
 import json
+import re
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -305,26 +306,50 @@ def assemble_tool_calls(accumulated: list) -> list:
 # Model list translators
 # ---------------------------------------------------------------------------
 
+def _normalize_model_name(model_id: str) -> tuple[str, str, list[str]]:
+    """Return normalized forms of a model id for robust family parsing.
+
+    Returns a tuple of:
+    - base name without quant suffix
+    - compact alnum string
+    - token list
+    """
+    base = model_id.split(":", 1)[0].lower().rsplit("/", 1)[-1]
+    tokenized = re.sub(r"[^a-z0-9]+", " ", base).strip()
+    tokens = tokenized.split() if tokenized else []
+    compact = "".join(tokens)
+    return base, compact, tokens
+
 def _guess_details(model_id: str, fmt: str = "") -> dict:
     """Infer Ollama-style model details from an OpenAI model ID string."""
     name = model_id.lower()
-    if "qwen3" in name:
+    _, compact, tokens = _normalize_model_name(model_id)
+
+    first = tokens[0] if tokens else ""
+    second = tokens[1] if len(tokens) > 1 else ""
+
+    if ("qwen3.5" in name) or compact.startswith("qwen35") or first in ("qwen35", "qwen3p5"):
         family = "qwen35"
-    elif "qwen2" in name or "qwen" in name:
+    elif compact.startswith("qwen3") or first == "qwen3":
+        family = "qwen3"
+    elif compact.startswith("qwen2") or first in ("qwen2", "qwen"):
         family = "qwen2"
-    elif "llama" in name:
+    elif compact.startswith("llama") or first.startswith("llama"):
         family = "llama"
-    elif "gemma4" in name:
+    elif compact.startswith("gemma4") or first == "gemma4" or (first == "gemma" and second.startswith("4")):
         family = "gemma4"
-    elif "gemma" in name:
+    elif compact.startswith("gemma") or first == "gemma":
         family = "gemma"
-    elif "mistral" in name or "mixtral" in name:
+    elif compact.startswith("glm") or first.startswith("glm"):
+        # Keep GLM family stable so clients can read glm.context_length.
+        family = "glm"
+    elif compact.startswith("mistral") or compact.startswith("mixtral"):
         family = "mistral"
-    elif "phi" in name:
+    elif compact.startswith("phi") or first.startswith("phi"):
         family = "phi3"
-    elif "deepseek" in name:
+    elif compact.startswith("deepseek") or first == "deepseek":
         family = "deepseek"
-    elif "gemini" in name:
+    elif compact.startswith("gemini") or first == "gemini":
         family = "gemini"
     else:
         family = ""
@@ -348,6 +373,40 @@ def _guess_details(model_id: str, fmt: str = "") -> dict:
         "parameter_size": "",
         "quantization_level": quant,
     }
+
+
+def _context_key_aliases(model_id: str, family: str) -> list[str]:
+    """Return candidate prefixes for *.context_length keys.
+
+    We always include the inferred family when available. For unknown families,
+    derive stable fallbacks from the model name (e.g. "GLM-4.7" -> "glm").
+    """
+    aliases: list[str] = []
+    if family:
+        aliases.append(family)
+
+    _, _, parts = _normalize_model_name(model_id)
+    if parts:
+        primary = parts[0]
+        if primary and primary not in aliases:
+            aliases.append(primary)
+        # Join first token + numeric version when present: "gemma" + "4" -> "gemma4".
+        if len(parts) > 1 and parts[1].isdigit():
+            combined = f"{primary}{parts[1]}"
+            if combined not in aliases:
+                aliases.append(combined)
+
+    return aliases
+
+
+def _build_model_info(model_id: str, family: str, context_length: int) -> dict:
+    """Build model_info with llm context plus family/name-derived aliases."""
+    model_info: dict = {"llm.context_length": context_length}
+    for alias in _context_key_aliases(model_id, family):
+        model_info[f"{alias}.context_length"] = context_length
+    if family:
+        model_info["general.architecture"] = family
+    return model_info
 
 
 def openai_models_to_ollama_tags(oai: dict) -> dict:
@@ -393,10 +452,7 @@ def openai_models_to_ollama_show(oai: dict, name: str, context_length: int = 327
         if model_id == name or model_id == base_name:
             details = _guess_details(model_id)
             arch = details.get("family", "")
-            model_info: dict = {"llm.context_length": context_length}
-            if arch:
-                model_info["general.architecture"] = arch
-                model_info[f"{arch}.context_length"] = context_length
+            model_info = _build_model_info(model_id, arch, context_length)
             return {
                 "modelfile": "",
                 "parameters": "",
@@ -436,10 +492,7 @@ def local_model_to_ollama_show(local_model: dict, name: str, context_length: int
     fmt = local_model.get("format", "")
     details = _guess_details(name, fmt=fmt)
     arch = details.get("family", "")
-    model_info: dict = {"llm.context_length": context_length}
-    if arch:
-        model_info["general.architecture"] = arch
-        model_info[f"{arch}.context_length"] = context_length
+    model_info = _build_model_info(name, arch, context_length)
     if capabilities is None:
         capabilities = ["completion", "tools"]
         if local_model.get("is_vision"):
